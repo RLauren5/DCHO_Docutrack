@@ -22,7 +22,7 @@ export default function Login({ onLogin }) {
     <div
       className="flex items-center justify-center h-screen bg-cover bg-center relative"
       style={{
-        backgroundImage: "url('/bg1.jpg')", // 👈 place your GIF file in /public
+        backgroundImage: "url('/DCHO_Docutrack/bg1.jpg')", // 👈 place your GIF file in /public
       }}
     >
       {/* Overlay for better text contrast */}
@@ -34,7 +34,7 @@ export default function Login({ onLogin }) {
       >
         {/* Logo at the top */}
         <img
-          src="/DCHO Logo.png" // 👈 place your logo inside /public as logo.png
+          src="/DCHO_Docutrack/DCHO Logo.png" // 👈 place your logo inside /public as logo.png
           alt="DocuTrack Logo"
           className="w-20 h-20 mb-4 rounded-full object-contain shadow-md"
         />
