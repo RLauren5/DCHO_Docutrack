@@ -1,9 +1,12 @@
 // src/pages/UserDashboard.jsx
 import React, { useState, useEffect } from "react";
+import { Search, X } from "lucide-react"; // install if not yet: npm install lucide-react
 
 const API_BASE = "http://192.168.1.224/DCHO-docutrack-api/api";
 
 export default function UserDashboard({ user, onLogout }) {
+  const [historySearchTerm, setHistorySearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("transactions");
   const [transactions, setTransactions] = useState([]);
   const [history, setHistory] = useState([]);
@@ -12,6 +15,7 @@ export default function UserDashboard({ user, onLogout }) {
   const [showModal1, setShowModal1] = useState(false);
   const [showModal2, setShowModal2] = useState(false);
   const [trackingNo, setTrackingNo] = useState("");
+
   const [logDetails, setLogDetails] = useState({
     remarks: "",
     action_taken: "",
@@ -23,6 +27,15 @@ export default function UserDashboard({ user, onLogout }) {
     fetchUserTransactions();
   }, []);
 
+function getPhilippineDateTimeLocal() {
+  const now = new Date();
+
+  // Convert to UTC first, then add 8 hours for PH time
+  const philippineTime = new Date(now.getTime() + 8 * 60 * 60000);
+
+  // Format to match <input type="datetime-local">: "YYYY-MM-DDTHH:mm"
+  return philippineTime.toISOString().slice(0, 16);
+}
   // ✅ Fetch all user transactions then filter in UI
   const fetchUserTransactions = async () => {
     try {
@@ -74,6 +87,7 @@ export default function UserDashboard({ user, onLogout }) {
     setShowModal1(false);
     setTrackingNo("");
   };
+
   const handleCloseModal2 = () => {
     setShowModal2(false);
     setLogDetails({
@@ -86,67 +100,67 @@ export default function UserDashboard({ user, onLogout }) {
 
   // ✅ Validate tracking number
   // ✅ Validate tracking number only (no log form opening)
-const handleVerifyTracking = async (e) => {
-  e.preventDefault();
-  try {
-    const res = await fetch(`${API_BASE}/check_transaction.php`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tracking_no: trackingNo }),
-    });
-    const data = await res.json();
+  const handleVerifyTracking = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${API_BASE}/check_transaction.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tracking_no: trackingNo }),
+      });
+      const data = await res.json();
 
-    if (!data.exists) {
-      alert("❌ Tracking number not found.");
-      setShowModal1(false);
-      return;
-    }
+      if (!data.exists) {
+        alert("❌ Tracking number not found.");
+        setShowModal1(false);
+        return;
+      }
 
-    if (data.status === "COMPLETED" || data.status === "FAILED") {
-      const statusMessage =
-        data.status === "COMPLETED"
-          ? "⚠️ This transaction is already COMPLETED and cannot be logged."
-          : "❌ This transaction has FAILED and cannot be logged.";
-      alert(statusMessage);
-      setShowModal1(false);
-      return;
-    }
+      if (data.status === "COMPLETED" || data.status === "FAILED") {
+        const statusMessage =
+          data.status === "COMPLETED"
+            ? "⚠️ This transaction is already COMPLETED and cannot be logged."
+            : "❌ This transaction has FAILED and cannot be logged.";
+        alert(statusMessage);
+        setShowModal1(false);
+        return;
+      }
 
-    // ✅ Save transaction to user's dashboard
-    await fetch(`${API_BASE}/save_user_transaction.php`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: user?.username,
+      // ✅ Save transaction to user's dashboard
+      await fetch(`${API_BASE}/save_user_transaction.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: user?.username,
+          tracking_no: trackingNo,
+        }),
+      });
+
+      // ✅ Automatically add log for "Received"
+      const autoLog = {
         tracking_no: trackingNo,
-      }),
-    });
+        remarks: "Received",
+        action_taken: "Received",
+        date_time_received: new Date().toISOString().slice(0, 16),
+        received_by: user?.full_name || "Unknown",
+      };
 
-    // ✅ Automatically add log for "Received"
-    const autoLog = {
-      tracking_no: trackingNo,
-      remarks: "Received",
-      action_taken: "Received",
-      date_time_received: new Date().toISOString().slice(0, 16),
-      received_by: user?.full_name || "Unknown",
-    };
+      await fetch(`${API_BASE}/add_log.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(autoLog),
+      });
 
-    await fetch(`${API_BASE}/add_log.php`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(autoLog),
-    });
-
-    alert("✅ Tracking number verified and initial log added!");
-    setShowModal1(false);
-    setTrackingNo("");
-    await fetchUserTransactions();
-  } catch (err) {
-    console.error(err);
-    alert("Error verifying tracking number.");
-    setShowModal1(false);
-  }
-};
+      alert("✅ Tracking number verified and initial log added!");
+      setShowModal1(false);
+      setTrackingNo("");
+      await fetchUserTransactions();
+    } catch (err) {
+      console.error(err);
+      alert("Error verifying tracking number.");
+      setShowModal1(false);
+    }
+  };
 
   // ✅ Save log entry
   const handleSubmitLog = async (e) => {
@@ -180,8 +194,26 @@ const handleVerifyTracking = async (e) => {
     }
   };
 
+  const filteredTransactions = transactions.filter((t) => {
+    const term = searchTerm.toLowerCase();
+    return (
+      t.tracking_no?.toLowerCase().includes(term) ||
+      t.sender_name?.toLowerCase().includes(term) ||
+      t.document_name?.toLowerCase().includes(term)
+    );
+  });
+
+  const filteredHistory = history.filter((t) => {
+    const term = historySearchTerm.trim().toLowerCase();
+    return (
+      t.tracking_no?.toLowerCase().includes(term) ||
+      t.sender_name?.toLowerCase().includes(term) ||
+      t.document_name?.toLowerCase().includes(term)
+    );
+  });
+
   // ✅ Reusable table renderer
-  const renderTransactionTable = (list) => (
+  const renderTransactionTable = (list, activeTab) => (
     <table className="w-full border-collapse text-sm">
       <thead className="bg-[#1b1b1d] text-gray-300">
         <tr className="text-sm">
@@ -208,7 +240,18 @@ const handleVerifyTracking = async (e) => {
           list.map((t) => (
             <React.Fragment key={t.tracking_no}>
               <tr className="hover:bg-[#3a3a3f] cursor-pointer">
-                <td className="p-3 border border-gray-700">{t.tracking_no}</td>
+                <td className="p-3 border border-gray-700">
+                  {/* ⚠️ Show blinking icon only in "Transactions" tab */}
+                  {activeTab === "transactions" && t.replied && (
+                    <span
+                      className="text-yellow-400 ml-1 animate-pulse [animation-duration:0.6s]"
+                      title="This transaction is nearing expiry"
+                    >
+                      ⚠️
+                    </span>
+                  )}
+                  {t.tracking_no}{" "}
+                </td>
                 <td className="p-3 border border-gray-700">
                   {t.date_indorsement}
                 </td>
@@ -261,7 +304,7 @@ const handleVerifyTracking = async (e) => {
                 <tr className="bg-[#1f1f21] border border-gray-700">
                   <td colSpan="10" className="p-4">
                     <div className="flex justify-between items-center mb-2">
-                      <h3 className="font-semibold text-yellow-400"> 
+                      <h3 className="font-semibold text-yellow-400">
                         Transaction Logs for {t.tracking_no}
                       </h3>
                       <button
@@ -271,9 +314,7 @@ const handleVerifyTracking = async (e) => {
                           setLogDetails({
                             remarks: "",
                             action_taken: "",
-                            date_time_received: new Date()
-                              .toISOString()
-                              .slice(0, 16),
+                            date_time_received: getPhilippineDateTimeLocal(),
                             received_by: user?.full_name || "",
                           });
                         }}
@@ -393,6 +434,27 @@ const handleVerifyTracking = async (e) => {
           <main className="bg-[#2a2a2e] p-6 rounded-xl shadow-lg">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-lg font-semibold">Transactions</h2>
+
+              {/* 🔍 Search bar with icons */}
+              <div className="relative w-80">
+                <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search by Tracking No, Sender, or Document Name..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 rounded-md bg-[#1b1b1d] text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-green-600"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
               <button
                 onClick={handleOpenModal}
                 className="bg-yellow-500 text-black px-4 py-2 rounded hover:bg-yellow-400 transition font-semibold"
@@ -400,15 +462,43 @@ const handleVerifyTracking = async (e) => {
                 + Add Tracking Number
               </button>
             </div>
-            {renderTransactionTable(transactions)}
+            {renderTransactionTable(filteredTransactions, activeTab)}
           </main>
         )}
 
         {/* TRANSACTION HISTORY */}
         {activeTab === "history" && (
           <main className="bg-[#2a2a2e] p-6 rounded-xl shadow-lg">
-            <h2 className="text-lg font-semibold mb-6">Transaction History</h2>
-            {renderTransactionTable(history)}
+            {/* Title */}
+            <h2 className="text-lg font-semibold mb-6 text-center">
+              Transaction History
+            </h2>
+
+            {/* 🔍 Centered Search Bar */}
+            <div className="flex justify-center mb-6">
+              <div className="relative w-96">
+                <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search by Tracking No, Sender, or Document Name..."
+                  value={historySearchTerm}
+                  onChange={(e) => setHistorySearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 rounded-md bg-[#1b1b1d] text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-green-600"
+                />
+                {historySearchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setHistorySearchTerm("")}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 🧾 Filtered table */}
+            {renderTransactionTable(filteredHistory, activeTab)}
           </main>
         )}
       </div>

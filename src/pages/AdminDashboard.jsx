@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { createUser, getUsers, getAllTransactions } from "../api/api";
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 
 const API_BASE = "http://192.168.1.224/DCHO-docutrack-api/api";
 
@@ -49,7 +49,28 @@ export default function AdminDashboard({ user, onLogout }) {
     forwarded_to: "",
     remarks: "",
     status: "ONGOING",
+    process_type: "",
+    expiry_date: "", // ✅ Add this
   });
+
+ function getPhilippineDateTimeLocal() {
+  const now = new Date();
+
+  // Convert to UTC first, then add 8 hours for PH time
+  const philippineTime = new Date(now.getTime() + 8 * 60 * 60000);
+
+  // Format to match <input type="datetime-local">: "YYYY-MM-DDTHH:mm"
+  return philippineTime.toISOString().slice(0, 16);
+}
+
+  const isReceiving1 =
+    user?.username?.toLowerCase() === "receiving1" &&
+    user?.role?.toLowerCase() === "admin";
+
+  // 🔹 Check if the user is admin named "receiving1"
+  const hideUserManagement =
+    user?.role?.toLowerCase() === "admin" &&
+    user?.username?.toLowerCase() === "receiving1";
 
   // 🔹 Load users and transactions
   useEffect(() => {
@@ -173,11 +194,12 @@ export default function AdminDashboard({ user, onLogout }) {
   };
 
   const handleOpenAddLog = (trackingNo) => {
+    
     setSelectedTrackingNo(trackingNo);
     setLogDetails({
       action_taken: "",
       remarks: "",
-      date_time_received: "",
+      date_time_received: getPhilippineDateTimeLocal(),
       received_by: user?.full_name || "",
     });
     setShowAddLogModal(true);
@@ -357,13 +379,13 @@ export default function AdminDashboard({ user, onLogout }) {
   });
 
   const filteredHistory = displayedTransactions.filter((t) => {
-  const term = historySearchTerm.toLowerCase();
-  return (
-    t.tracking_no?.toLowerCase().includes(term) ||
-    t.sender_name?.toLowerCase().includes(term) ||
-    t.document_name?.toLowerCase().includes(term)
-  );
-});
+    const term = historySearchTerm.toLowerCase();
+    return (
+      t.tracking_no?.toLowerCase().includes(term) ||
+      t.sender_name?.toLowerCase().includes(term) ||
+      t.document_name?.toLowerCase().includes(term)
+    );
+  });
 
   return (
     <div className="min-h-screen bg-blue-950 text-gray-200 p-8">
@@ -392,19 +414,29 @@ export default function AdminDashboard({ user, onLogout }) {
             { id: "transactions", label: "TRANSACTIONS" },
             { id: "history", label: "TRANSACTION HISTORY" },
             { id: "users", label: "USER MANAGEMENT" },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`pb-3 text-sm font-semibold transition-all ${
-                activeTab === tab.id
-                  ? "text-yellow-400 border-b-2 border-yellow-400"
-                  : "text-gray-400 hover:text-gray-200"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          ]
+            // 🔹 Filter out "USER MANAGEMENT" if admin is receiving1
+            .filter(
+              (tab) =>
+                !(
+                  tab.id === "users" &&
+                  user?.role?.toLowerCase() === "admin" &&
+                  user?.username?.toLowerCase() === "receiving1"
+                )
+            )
+            .map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`pb-3 text-sm font-semibold transition-all ${
+                  activeTab === tab.id
+                    ? "text-yellow-400 border-b-2 border-yellow-400"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
         </div>
 
         {/* --- History Tab --- */}
@@ -449,6 +481,7 @@ export default function AdminDashboard({ user, onLogout }) {
               </button>
             </div>
 
+            <h1> </h1>
             {/* Table */}
             <table className="w-full border-collapse text-sm">
               <thead className="bg-[#1b1b1d] text-gray-300">
@@ -631,16 +664,28 @@ export default function AdminDashboard({ user, onLogout }) {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-lg font-semibold text-white">Transactions</h2>
 
-              <div className="flex items-center gap-3">
-                {/* 🔍 Search Input */}
+              {/* 🔍 Search bar with icons */}
+              <div className="relative w-80">
+                <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
                   placeholder="Search by Tracking No, Sender, or Document Name..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="px-3 py-2 rounded-md bg-[#1b1b1d] text-white text-sm focus:outline-none focus:ring-2 focus:ring-green-600 w-80"
+                  className="w-full pl-9 pr-8 py-2 rounded-md bg-[#1b1b1d] text-white text-sm border border-gray-700 focus:outline-none focus:ring-2 focus:ring-green-600"
                 />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-2 top-2.5 text-gray-400 hover:text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
 
+              <div className="flex items-center gap-3">
                 {/* ➕ Add Transaction Button */}
                 <button
                   onClick={() => setShowTransactionModal(true)}
@@ -681,6 +726,14 @@ export default function AdminDashboard({ user, onLogout }) {
                         onClick={() => toggleLogs(t.tracking_no)}
                       >
                         <td className="p-3 border border-gray-700">
+                          {t.replied && (
+                            <span
+                              className="text-yellow-400 ml-1 animate-pulse [animation-duration:0.6s]"
+                              title="This transaction is nearing expiry"
+                            >
+                              ⚠️
+                            </span>
+                          )}
                           {t.tracking_no}
                         </td>
                         <td className="p-3 border border-gray-700">
@@ -884,6 +937,8 @@ export default function AdminDashboard({ user, onLogout }) {
           </main>
         )}
       </div>
+
+
       {/* ✅ Add Log Modal */}
       {showAddLogModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
@@ -1091,6 +1146,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   })
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md"
+                required
               />{" "}
               <select
                 value={transactionData.document_type}
@@ -1101,6 +1157,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   })
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md bg-gray-900"
+                required
               >
                 {" "}
                 <option value="CRMS LETTER">CRMS LETTER</option>{" "}
@@ -1117,6 +1174,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   })
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md"
+                required
               />{" "}
               <input
                 type="text"
@@ -1140,6 +1198,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   })
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md bg-gray-900"
+                required
               >
                 {" "}
                 <option value="">Select Department</option>{" "}
@@ -1160,7 +1219,47 @@ export default function AdminDashboard({ user, onLogout }) {
                   })
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md"
+                required
               />{" "}
+              <div className="mb-3">
+                <input
+                  list="processTypeOptions"
+                  type="text"
+                  placeholder="Select or type process type..."
+                  value={transactionData.process_type}
+                  onChange={(e) =>
+                    setTransactionData({
+                      ...transactionData,
+                      process_type: e.target.value,
+                    })
+                  }
+                  className="w-full px-4 py-2 border rounded-md bg-gray-900 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                  required
+                />
+                <datalist id="processTypeOptions">
+                  <option value="(TFRR) – Census Tagging" />
+                  <option value="(TFRR) – Dialogue and Meeting Proper" />
+                  <option value="(TFRR) – Issuance of Certification" />
+                  <option value="(LHB) – Census Tagging" />
+                  <option value="(LHB) – Meeting Proper" />
+                  <option value="(LHB) – Certificate of Compliance" />
+                  <option value="Process for Site Inspection" />
+                  <option value="Issuance of Notice of Violation" />
+                  <option value="Issuance of Certificate of No Objection" />
+                  <option value="Conduct of Census and Tagging/Interview" />
+                  <option value="Validation for Census and Tagging/Interview" />
+                  <option value="Census Tagging through HMIS Online Process" />
+                  <option value="Issuance of Certification for Water/Building Permit" />
+                  <option value="Preparation for Payment (ULRP)" />
+                  <option value="Issuance of Certificate of Awardee" />
+                  <option value="Preparation of Deed of Sale" />
+                  <option value="Preparation of Deed of Donation" />
+                  <option value="Preparation of Agreement to Sell / LPA" />
+                  <option value="Conduct of Inspection Report" />
+                  <option value="Conduct of Dialogue" />
+                  <option value="Special Case Urgent" />
+                </datalist>
+              </div>
               <select
                 value={transactionData.status}
                 onChange={(e) =>
@@ -1170,6 +1269,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   })
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md bg-gray-900"
+                required
               >
                 {" "}
                 <option value="ONGOING">ONGOING</option>{" "}
@@ -1210,12 +1310,13 @@ export default function AdminDashboard({ user, onLogout }) {
                 handleEditTransactionSubmit(e, editingTransaction.tracking_no)
               }
             >
+              {/* Date of Endorsement */}
               <label className="block mb-2 font-medium">
                 Date of Endorsement
               </label>
               <input
                 type="date"
-                value={editingTransaction.date_indorsement}
+                value={editingTransaction.date_indorsement || ""}
                 onChange={(e) =>
                   setEditingTransaction({
                     ...editingTransaction,
@@ -1224,14 +1325,16 @@ export default function AdminDashboard({ user, onLogout }) {
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md"
                 required
+                disabled={isReceiving1}
               />
 
+              {/* Date and Time Received */}
               <label className="block mb-2 font-medium">
                 Date and Time Received
               </label>
               <input
                 type="datetime-local"
-                value={editingTransaction.datetime_receive}
+                value={editingTransaction.datetime_receive || ""}
                 onChange={(e) =>
                   setEditingTransaction({
                     ...editingTransaction,
@@ -1240,12 +1343,14 @@ export default function AdminDashboard({ user, onLogout }) {
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md"
                 required
+                disabled={isReceiving1}
               />
 
+              {/* Sender Name */}
               <input
                 type="text"
                 placeholder="Sender Name"
-                value={editingTransaction.sender_name}
+                value={editingTransaction.sender_name || ""}
                 onChange={(e) =>
                   setEditingTransaction({
                     ...editingTransaction,
@@ -1254,12 +1359,14 @@ export default function AdminDashboard({ user, onLogout }) {
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md"
                 required
+                disabled={isReceiving1}
               />
 
+              {/* Organization */}
               <input
                 type="text"
                 placeholder="Office / Organization / Address"
-                value={editingTransaction.organization}
+                value={editingTransaction.organization || ""}
                 onChange={(e) =>
                   setEditingTransaction({
                     ...editingTransaction,
@@ -1267,10 +1374,12 @@ export default function AdminDashboard({ user, onLogout }) {
                   })
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md"
+                disabled={isReceiving1}
               />
 
+              {/* Document Type */}
               <select
-                value={editingTransaction.document_type}
+                value={editingTransaction.document_type || ""}
                 onChange={(e) =>
                   setEditingTransaction({
                     ...editingTransaction,
@@ -1278,15 +1387,17 @@ export default function AdminDashboard({ user, onLogout }) {
                   })
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md bg-gray-900"
+                disabled={isReceiving1}
               >
                 <option value="CRMS LETTER">CRMS LETTER</option>
                 <option value="HANDCARRY LETTER">HANDCARRY LETTER</option>
               </select>
 
+              {/* Scanned File */}
               <input
                 type="text"
                 placeholder="Scanned File Link"
-                value={editingTransaction.scanned_file}
+                value={editingTransaction.scanned_file || ""}
                 onChange={(e) =>
                   setEditingTransaction({
                     ...editingTransaction,
@@ -1294,12 +1405,14 @@ export default function AdminDashboard({ user, onLogout }) {
                   })
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md"
+                disabled={isReceiving1}
               />
 
+              {/* Document Name */}
               <input
                 type="text"
                 placeholder="Document Name"
-                value={editingTransaction.document_name}
+                value={editingTransaction.document_name || ""}
                 onChange={(e) =>
                   setEditingTransaction({
                     ...editingTransaction,
@@ -1308,10 +1421,12 @@ export default function AdminDashboard({ user, onLogout }) {
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md"
                 required
+                disabled={isReceiving1}
               />
 
+              {/* Forwarded To */}
               <select
-                value={editingTransaction.forwarded_to}
+                value={editingTransaction.forwarded_to || ""}
                 onChange={(e) =>
                   setEditingTransaction({
                     ...editingTransaction,
@@ -1319,6 +1434,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   })
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md bg-gray-900"
+                disabled={isReceiving1}
               >
                 <option value="">Select Department</option>
                 <option value="EDM">EDM</option>
@@ -1329,9 +1445,51 @@ export default function AdminDashboard({ user, onLogout }) {
                 <option value="AMD">AMD</option>
               </select>
 
+              {/* Process Type */}
+              <div className="mb-3">
+                <input
+                  disabled={isReceiving1}
+                  list="processTypeOptions"
+                  type="text"
+                  placeholder="Select or type process type..."
+                  value={editingTransaction.process_type || ""}
+                  onChange={(e) =>
+                    setEditingTransaction({
+                      ...editingTransaction,
+                      process_type: e.target.value,
+                    })
+                  }
+                  className="w-full px-4 py-2 border rounded-md bg-gray-900 text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
+                />
+                <datalist id="processTypeOptions">
+                  <option value="(TFRR) – Census Tagging" />
+                  <option value="(TFRR) – Dialogue and Meeting Proper" />
+                  <option value="(TFRR) – Issuance of Certification" />
+                  <option value="(LHB) – Census Tagging" />
+                  <option value="(LHB) – Meeting Proper" />
+                  <option value="(LHB) – Certificate of Compliance" />
+                  <option value="Process for Site Inspection" />
+                  <option value="Issuance of Notice of Violation" />
+                  <option value="Issuance of Certificate of No Objection" />
+                  <option value="Conduct of Census and Tagging/Interview" />
+                  <option value="Validation for Census and Tagging/Interview" />
+                  <option value="Census Tagging through HMIS Online Process" />
+                  <option value="Issuance of Certification for Water/Building Permit" />
+                  <option value="Preparation for Payment (ULRP)" />
+                  <option value="Issuance of Certificate of Awardee" />
+                  <option value="Preparation of Deed of Sale" />
+                  <option value="Preparation of Deed of Donation" />
+                  <option value="Preparation of Agreement to Sell / LPA" />
+                  <option value="Conduct of Inspection Report" />
+                  <option value="Conduct of Dialogue" />
+                  <option value="Special Case Urgent" />
+                </datalist>
+              </div>
+
+              {/* Remarks */}
               <textarea
                 placeholder="Remarks"
-                value={editingTransaction.remarks}
+                value={editingTransaction.remarks || ""}
                 onChange={(e) =>
                   setEditingTransaction({
                     ...editingTransaction,
@@ -1339,10 +1497,12 @@ export default function AdminDashboard({ user, onLogout }) {
                   })
                 }
                 className="w-full mb-3 px-4 py-2 border rounded-md"
+                disabled={isReceiving1}
               />
 
+              {/* Status (only editable field for receiving1) */}
               <select
-                value={editingTransaction.status}
+                value={editingTransaction.status || ""}
                 onChange={(e) =>
                   setEditingTransaction({
                     ...editingTransaction,
